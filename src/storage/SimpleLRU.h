@@ -17,9 +17,11 @@ namespace Backend {
  */
 class SimpleLRU : public Afina::Storage {
 public:
-    SimpleLRU(size_t max_size = 1024) : _max_size(max_size) {}
+    explicit SimpleLRU(size_t max_size = 1024) : _max_size(max_size) {}
+    SimpleLRU(const SimpleLRU&) = delete;
+    SimpleLRU& operator= (const SimpleLRU&) = delete;
 
-    ~SimpleLRU() {
+        ~SimpleLRU() {
         _lru_index.clear();
         _lru_head.reset(); // TODO: Here is stack overflow
     }
@@ -42,7 +44,7 @@ public:
 private:
     // LRU cache node
     using lru_node = struct lru_node {
-        std::string key;
+        const std::string key;
         std::string value;
         std::unique_ptr<lru_node> prev;
         std::unique_ptr<lru_node> next;
