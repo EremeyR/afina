@@ -6,7 +6,7 @@ namespace Backend {
 // See MapBasedGlobalLockImpl.h
 bool SimpleLRU::Put(const std::string &key, const std::string &value) {
     if (key.size() + value.size() > _max_size) {
-        return false;
+        throw;
     }
 
     auto current_pair = _lru_index.find(key);
@@ -43,7 +43,7 @@ bool SimpleLRU::Put(const std::string &key, const std::string &value) {
 // See MapBasedGlobalLockImpl.h
 bool SimpleLRU::PutIfAbsent(const std::string &key, const std::string &value) {
     if (key.size() + value.size() > _max_size) {
-        return false;
+        throw;
     }
 
     auto current_pair = _lru_index.find(key);
@@ -61,7 +61,36 @@ bool SimpleLRU::PutIfAbsent(const std::string &key, const std::string &value) {
 }
 
 // See MapBasedGlobalLockImpl.h
-bool SimpleLRU::Set(const std::string &key, const std::string &value) { return false; }
+bool SimpleLRU::Set(const std::string &key, const std::string &value) {
+    if (key.size() + value.size() > _max_size) {
+        throw;
+    }
+
+    auto current_pair = _lru_index.find(key);
+    if(current_pair == _lru_index.end()){
+        return false;
+    } else {
+        if (value.size() > current_pair->second.get().value.size()) {
+            if (_real_size + (value.size() - current_pair->second.get().value.size()) > _max_size) {
+                FreeLast(value.size() - (_max_size - (_real_size - current_pair->second.get().value.size())));
+            }
+        }
+        _real_size -= (current_pair->second.get().key.size() + current_pair->second.get().value.size());
+
+        if (current_pair->second.get().prev == nullptr) {  //  if it's a head
+            current_pair->second.get().value = value;
+        } else if(current_pair->second.get().next == nullptr) {  //  if it's a tail
+            current_pair->second.get().prev->next.reset(nullptr);
+            _lru_tail = current_pair->second.get().prev;
+            MakeNewHead(key, value);
+        } else {
+            current_pair->second.get().next->prev = current_pair->second.get().prev;
+            current_pair->second.get().prev->next = std::move(current_pair->second.get().next);
+            MakeNewHead(key, value);
+        }
+    }
+    return true;
+}
 
 // See MapBasedGlobalLockImpl.h
 bool SimpleLRU::Delete(const std::string &key) { return false; }
