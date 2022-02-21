@@ -115,7 +115,15 @@ bool SimpleLRU::Delete(const std::string &key) {
 }
 
 // See MapBasedGlobalLockImpl.h
-bool SimpleLRU::Get(const std::string &key, std::string &value) { return false; }
+bool SimpleLRU::Get(const std::string &key, std::string &value) {
+    auto current_pair = _lru_index.find(key);
+    if(current_pair == _lru_index.end()) {
+        return false;
+    } else {
+        value = current_pair->second.get().value;
+        return true;
+    }
+}
 
 bool SimpleLRU::FreeLast(size_t size) {
     if (size > _max_size) {
