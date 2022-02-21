@@ -5,11 +5,11 @@
 #include <memory>
 #include <mutex>
 #include <string>
+#include <exception>
 
 #include <afina/Storage.h>
 
-namespace Afina {
-namespace Backend {
+namespace Afina::Backend {
 
 /**
  * # Map based implementation
@@ -22,9 +22,11 @@ public:
     SimpleLRU(const SimpleLRU&) = delete;
     SimpleLRU& operator= (const SimpleLRU&) = delete;
 
-        ~SimpleLRU() {
+    ~SimpleLRU() override{
         _lru_index.clear();
-        _lru_head.reset(); // TODO: Here is stack overflow
+        while (_lru_head) {
+            _lru_head = std::move(_lru_head->next);
+        }
     }
 
     // Implements Afina::Storage interface
@@ -49,6 +51,9 @@ private:
         std::string value;
         lru_node* prev;
         std::unique_ptr<lru_node> next;
+
+        lru_node(const std::string& key, const std::string& value, std::unique_ptr<lru_node>&& next)
+            : key(key), value(value), prev(nullptr), next(std::move(next)) {};
     };
 
     // Maximum number of bytes could be stored in this cache.
@@ -64,11 +69,12 @@ private:
     std::unique_ptr<lru_node> _lru_head;
 
     // Index of nodes from list above, allows fast random access to elements by lru_node#key
-    std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<const lru_node>,
-             std::less<const std::string>> _lru_index;
+    std::map<std::reference_wrapper<const std::string>, std::reference_wrapper<lru_node>,std::less<std::string>> _lru_index;
+
+    bool FreeLast(size_t size);
+    void MakeNewHead(const std::string &key, const std::string &value);
 };
 
-} // namespace Backend
-} // namespace Afina
+} // namespace Afina::Backend
 
 #endif // AFINA_STORAGE_SIMPLE_LRU_H

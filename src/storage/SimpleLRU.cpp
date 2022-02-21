@@ -1,12 +1,11 @@
 #include "SimpleLRU.h"
 
-namespace Afina {
-namespace Backend {
+namespace Afina::Backend {
 
 // See MapBasedGlobalLockImpl.h
 bool SimpleLRU::Put(const std::string &key, const std::string &value) {
     if (key.size() + value.size() > _max_size) {
-        throw;
+        throw std::length_error("key.size() + value.size() > _max_size");
     }
 
     auto current_pair = _lru_index.find(key);
@@ -43,7 +42,7 @@ bool SimpleLRU::Put(const std::string &key, const std::string &value) {
 // See MapBasedGlobalLockImpl.h
 bool SimpleLRU::PutIfAbsent(const std::string &key, const std::string &value) {
     if (key.size() + value.size() > _max_size) {
-        throw;
+        throw std::length_error("key.size() + value.size() > _max_size");
     }
 
     auto current_pair = _lru_index.find(key);
@@ -63,7 +62,7 @@ bool SimpleLRU::PutIfAbsent(const std::string &key, const std::string &value) {
 // See MapBasedGlobalLockImpl.h
 bool SimpleLRU::Set(const std::string &key, const std::string &value) {
     if (key.size() + value.size() > _max_size) {
-        throw;
+        throw std::length_error("key.size() + value.size() > _max_size");
     }
 
     auto current_pair = _lru_index.find(key);
@@ -150,5 +149,4 @@ void SimpleLRU::MakeNewHead(const std::string &key, const std::string &value) {
     _real_size +=  key.size() + value.size();
 }
 
-} // namespace Backend
-} // namespace Afina
+} // namespace Afina::Backend
