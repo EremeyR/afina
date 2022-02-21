@@ -93,7 +93,26 @@ bool SimpleLRU::Set(const std::string &key, const std::string &value) {
 }
 
 // See MapBasedGlobalLockImpl.h
-bool SimpleLRU::Delete(const std::string &key) { return false; }
+bool SimpleLRU::Delete(const std::string &key) {
+    auto current_pair = _lru_index.find(key);
+    if(current_pair == _lru_index.end()) {
+        return false;
+    } else {
+        _lru_index.erase(_lru_tail->key);
+        _real_size -= (current_pair->second.get().key.size() + current_pair->second.get().value.size());
+
+        if (current_pair->second.get().prev == nullptr) {  //  if it's a head
+            _lru_head = std::move(_lru_head->next);
+        } else if(current_pair->second.get().next == nullptr) {  //  if it's a tail
+            current_pair->second.get().prev->next.reset(nullptr);
+            _lru_tail = current_pair->second.get().prev;
+        } else {
+            current_pair->second.get().next->prev = current_pair->second.get().prev;
+            current_pair->second.get().prev->next = std::move(current_pair->second.get().next);
+        }
+    }
+    return true;
+}
 
 // See MapBasedGlobalLockImpl.h
 bool SimpleLRU::Get(const std::string &key, std::string &value) { return false; }
