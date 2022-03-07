@@ -27,7 +27,9 @@ namespace Network {
 namespace MTblocking {
 
 // See Server.h
-ServerImpl::ServerImpl(std::shared_ptr<Afina::Storage> ps, std::shared_ptr<Logging::Service> pl) : Server(ps, pl), thread_counter(0) {}
+ServerImpl::ServerImpl(std::shared_ptr<Afina::Storage> ps, std::shared_ptr<Logging::Service> pl,
+                       size_t max_treads, long timeout) : Server(ps, pl), max_treads(max_treads),
+                                                          tv{timeout, 0}, thread_counter(0) {}
 
 // See Server.h
 ServerImpl::~ServerImpl() {}
@@ -79,11 +81,21 @@ void ServerImpl::Start(uint16_t port, uint32_t n_accept, uint32_t n_workers) {
 void ServerImpl::Stop() {
     running.store(false);
     shutdown(_server_socket, SHUT_RDWR);
+
+    // close(client_socket) blocking
+    std::lock_guard<std::mutex> stop_guard(_stop_mutex);
+    for (auto& worker_socket: _worker_sockets) {
+        shutdown(worker_socket, SHUT_RD);
+    }
 }
 
 // See Server.h
 void ServerImpl::Join() {
     assert(_thread.joinable());
+
+    std::unique_lock<std::mutex> lk(_join_mutex);
+    _join_cv.wait(lk, [this]{return (!running.load() && thread_counter == 0);});
+
     _thread.join();
     close(_server_socket);
 }
@@ -97,12 +109,17 @@ void ServerImpl::OnRun() {
         int client_socket;
         sockaddr client_addr;
         socklen_t client_addr_len = sizeof(client_addr);
+
         if ((client_socket = accept(_server_socket, (struct sockaddr *)&client_addr, &client_addr_len)) == -1) {
             continue;
         }
+
+
+        _worker_sockets.insert(client_socket);
+
+        // New worker creating
         if (thread_counter < max_treads){
             thread_counter++;
-            std::cout << "thread_counter++\n";
             std::thread new_worker(std::bind(&ServerImpl::Worker, this, client_socket, client_addr));
             new_worker.detach();
         } else {
@@ -113,6 +130,11 @@ void ServerImpl::OnRun() {
     _logger->warn("Network stopped");
 }
 void ServerImpl::Worker(int client_socket, sockaddr client_addr) {
+    // Here is connection state
+    // - parser: parse state of the stream
+    // - command_to_execute: last command parsed out of stream
+    // - arg_remains: how many bytes to read from stream to get command argument
+    // - argument_for_command: buffer stores argument
     std::size_t arg_remains;
     Protocol::Parser parser;
     std::string argument_for_command;
@@ -131,17 +153,20 @@ void ServerImpl::Worker(int client_socket, sockaddr client_addr) {
         _logger->debug("Accepted connection on descriptor {} (host={}, port={})\n", client_socket, host, port);
     }
 
-    {
-        struct timeval tv;
-        tv.tv_sec = 5; // TODO: make it configurable
-        tv.tv_usec = 0;
-        setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof tv);
-    }
+    setsockopt(client_socket, SOL_SOCKET, SO_RCVTIMEO, (const char *)&tv, sizeof tv);
 
+    // Process new connection:
+    // - read commands until socket alive
+    // - execute each command
+    // - send response
     try {
-        size_t readed_bytes = -1;
+        int readed_bytes = -1;
         char client_buffer[4096];
-                    std::cout << "start reading\n"; ///////
+
+        // Single block of data readed from the socket could trigger inside actions a multiple times,
+        // for example:
+        // - read#0: [<command1 start>]
+        // - read#1: [<command1 end> <argument> <command2> <argument for command 2> <command3> ... ]
         while ((readed_bytes = read(client_socket, client_buffer, sizeof(client_buffer))) > 0) {
             if (!running.load()) {
                 shutdown(_server_socket, SHUT_RD);
@@ -156,7 +181,6 @@ void ServerImpl::Worker(int client_socket, sockaddr client_addr) {
                     if (parser.Parse(client_buffer, readed_bytes, parsed)) {
                         // There is no command to be launched, continue to parse input stream
                         // Here we are, current chunk finished some command, process it
-                        //                            std::cout << "\t\t execute buf: " << client_buffer << "\n"; ///////
                         _logger->debug("Found new command: {} in {} bytes", parser.Name(), parsed);
                         command_to_execute = parser.Build(arg_remains);
                         if (arg_remains > 0) {
@@ -208,9 +232,7 @@ void ServerImpl::Worker(int client_socket, sockaddr client_addr) {
                     parser.Reset();
                 }
             } // while (readed_bytes)
-                              std::cout << "\tend parsing\n"; ///////
         }
-                    std::cout << "end reading\n"; ///////
 
         if (readed_bytes == 0) {
             _logger->debug("Connection closed");
@@ -221,11 +243,16 @@ void ServerImpl::Worker(int client_socket, sockaddr client_addr) {
         _logger->error("Failed to process connection on descriptor {}: {}", client_socket, ex.what());
     }
 
-    // We are done with this connection
+    // shutdown(worker_socket, SHUT_RD) blocking
+    std::lock_guard<std::mutex> stop_guard(_stop_mutex);
+    _worker_sockets.erase(client_socket);
     close(client_socket);
-
-    std::cout << std::this_thread::get_id() << "worker end\n";
     thread_counter--;
+
+    // for ServerImpl::Join() {
+    if(thread_counter == 0) {
+        _join_cv.notify_one();
+    }
 }
 
 } // namespace MTblocking
