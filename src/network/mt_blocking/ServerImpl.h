@@ -6,6 +6,9 @@
 
 #include <afina/network/Server.h>
 
+#include <sys/socket.h>
+#include <set>
+
 namespace spdlog {
 class logger;
 }
@@ -37,6 +40,7 @@ protected:
      * Method is running in the connection acceptor thread
      */
     void OnRun();
+    void Worker(int client_socket, sockaddr client_addr);
 
 private:
     // Logger instance
@@ -46,7 +50,8 @@ private:
     // flag must be atomic in order to safely publisj changes cross thread
     // bounds
     std::atomic<bool> running;
-
+    std::atomic<size_t> thread_counter;
+    const size_t max_treads = 5; // TODO
     // Server socket to accept connections on
     int _server_socket;
 
