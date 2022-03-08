@@ -1,0 +1,4 @@
+#ifndef AFINA_STRIPEDLRU_H
+#define AFINA_STRIPEDLRU_H
+
+#endif // AFINA_STRIPEDLRU_H
