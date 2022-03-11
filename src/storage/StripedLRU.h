@@ -8,7 +8,7 @@ namespace Backend {
 template <int stripe_count>
 class StripedLRU : public Afina::Storage {
 public:
-    StripedLRU(size_t memory_limit = stripe_count * 1024) {}
+    StripedLRU(size_t memory_limit = stripe_count * 1024, const int a = 4);
     ~StripedLRU() {}
 
     // see SimpleLRU.h

@@ -148,5 +148,8 @@ void SimpleLRU::MakeNewHead(const std::string &key, const std::string &value) {
 
     _real_size +=  key.size() + value.size();
 }
+void SimpleLRU::SetSize(size_t max_size) {
+    _max_size = max_size;
+}
 
 } // namespace Afina::Backend

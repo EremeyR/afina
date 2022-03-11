@@ -43,6 +43,8 @@ public:
     // Implements Afina::Storage interface
     bool Get(const std::string &key, std::string &value) override;
 
+    void SetSize(size_t max_size);
+
 private:
     // LRU cache node
     using lru_node = struct lru_node {
