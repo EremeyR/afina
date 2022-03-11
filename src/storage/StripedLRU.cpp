@@ -2,10 +2,9 @@
 namespace Afina {
 namespace Backend {
 
-
-template <int stripe_count>
-StripedLRU<stripe_count>::StripedLRU(size_t memory_limit, const int a) {
-    size_t stripe_size = memory_limit / stripe_count;
+StripedLRU::StripedLRU(size_t memory_limit, size_t number_of_strips)
+    : _stripes(number_of_strips) {
+    size_t stripe_size = memory_limit / number_of_strips;
     if (stripe_size < 2 || stripe_size >= 1048576) {
         throw(std::length_error("incorrect memory_limit"));
     }
@@ -15,38 +14,34 @@ StripedLRU<stripe_count>::StripedLRU(size_t memory_limit, const int a) {
     }
 }
 
-template <int stripe_count>
-bool StripedLRU<stripe_count>::Put(const std::string &key, const std::string &value) {
-    auto& stripe_pair = _stripes[std::hash<std::string>{}(key) % stripe_count];
+bool StripedLRU::Put(const std::string &key, const std::string &value) {
+    auto& stripe_pair = _stripes[std::hash<std::string>{}(key) % _stripes.size()];
     const std::lock_guard<std::mutex> _guard(stripe_pair.second);
     return stripe_pair.first.Put(key, value);
 }
 
-template <int stripe_count>
-bool StripedLRU<stripe_count>::PutIfAbsent(const std::string &key, const std::string &value) {
-    auto& stripe_pair = _stripes[std::hash<std::string>{}(key) % stripe_count];
+bool StripedLRU::PutIfAbsent(const std::string &key, const std::string &value) {
+    auto& stripe_pair = _stripes[std::hash<std::string>{}(key) % _stripes.size()];
     const std::lock_guard<std::mutex> _guard(stripe_pair.second);
     return stripe_pair.first.PutIfAbsent(key, value);
 }
 
-template <int stripe_count>
-bool StripedLRU<stripe_count>::Set(const std::string &key, const std::string &value) {
-    auto& stripe_pair = _stripes[std::hash<std::string>{}(key) % stripe_count];
+bool StripedLRU::Set(const std::string &key, const std::string &value) {
+    auto& stripe_pair = _stripes[std::hash<std::string>{}(key) % _stripes.size()];
     const std::lock_guard<std::mutex> _guard(stripe_pair.second);
     return stripe_pair.first.Set(key, value);
 }
 
-template <int stripe_count>
-bool StripedLRU<stripe_count>::Delete(const std::string &key) {
-    auto& stripe_pair = _stripes[std::hash<std::string>{}(key) % stripe_count];
+bool StripedLRU::Delete(const std::string &key) {
+    auto& stripe_pair = _stripes[std::hash<std::string>{}(key) % _stripes.size()];
     const std::lock_guard<std::mutex> _guard(stripe_pair.second);
     return stripe_pair.first.Delete(key);
 }
-template <int stripe_count> bool
-StripedLRU<stripe_count>::Get(const std::string &key, std::string &value) {
-    auto& stripe_pair = _stripes[std::hash<std::string>{}(key) % stripe_count];
+
+bool StripedLRU::Get(const std::string &key, std::string &value) {
+    auto& stripe_pair = _stripes[std::hash<std::string>{}(key) % _stripes.size()];
     const std::lock_guard<std::mutex> _guard(stripe_pair.second);
-    return stripe_pair.first.Get(key);
+    return stripe_pair.first.Get(key, value);
 }
 } // namespace Backend
 } // namespace Afina
